@@ -1322,9 +1322,9 @@ export default function DynamicSurveyForm() {
     <div
       className="min-h-screen py-8 px-4 survey-background"
     >
-      <div className="fixed left-0 top-0 h-full w-12 bg-gray-700 bg-opacity-90 flex items-center justify-center z-50">
+      <div className="fixed left-0 top-0 h-full md:w-12 bg-gray-700 bg-opacity-90 flex items-center justify-center z-50">
         <div
-          className="text-white font-black text-lg uppercase tracking-widest h-full flex flex-col justify-center items-center"
+          className="text-white font-black md:text-lg uppercase tracking-widest h-full flex flex-col justify-center items-center"
           style={{
             writingMode: "vertical-rl",
             textOrientation: "mixed",
