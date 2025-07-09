@@ -57,9 +57,9 @@ export default function DynamicSurveyForm() {
     [key: string]: string | string[];
   }>({});
   const [loading, setLoading] = useState(true);
-  const [questionIdMap, setQuestionIdMap] = useState<{ [key: string]: number }>(
-    {}
-  );
+  // const [questionIdMap, setQuestionIdMap] = useState<{ [key: string]: number }>(
+  //   {}
+  // );
   const [currentPage, setCurrentPage] = useState(0);
   const questionsPerPage = 2;
 
@@ -124,11 +124,11 @@ export default function DynamicSurveyForm() {
         setFormData(initialFormData);
 
         // Create questionIdMap for saving responses
-        const idMap = mappedQuestions.reduce((acc, q) => {
-          acc[q.id] = parseInt(q.id);
-          return acc;
-        }, {} as { [key: string]: number });
-        setQuestionIdMap(idMap);
+        // const idMap = mappedQuestions.reduce((acc, q) => {
+        //   acc[q.id] = parseInt(q.id);
+        //   return acc;
+        // }, {} as { [key: string]: number });
+        // setQuestionIdMap(idMap);
 
         setMounted(true);
         setLoading(false);
