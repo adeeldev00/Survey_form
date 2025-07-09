@@ -696,7 +696,8 @@ export default function DynamicSurveyForm() {
         setMounted(true);
         setLoading(false);
       } catch (err) {
-        toast.error("Error fetching data: " + err.message);
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        toast.error("Error fetching data: " + errorMessage);
         setLoading(false);
       }
     }
@@ -976,7 +977,8 @@ export default function DynamicSurveyForm() {
       setFormData(resetFormData);
       setCurrentPage(0);
     } catch (err) {
-      toast.error("Error saving responses: " + err.message);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      toast.error("Error saving responses: " + errorMessage);
     }
   };
 
