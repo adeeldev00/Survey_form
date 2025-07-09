@@ -1,103 +1,548 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+import React, { useState, useEffect } from "react";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { toast } from "sonner";
+import { supabase } from "@/lib/supabase";
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+// Define question types (extensible for future types)
+type QuestionType =
+  | "text"
+  | "email"
+  | "tel"
+  | "number"
+  | "radio"
+  | "checkbox"
+  | "dropdown"
+  | "textarea"
+  | "date"
+  | "file";
+
+// Define question configuration structure
+interface Question {
+  id: string;
+  label: string;
+  type: QuestionType;
+  required?: boolean;
+  options?: string[];
+  placeholder?: string;
+  min?: number;
+  max?: number;
+  rows?: number;
+}
+
+export default function DynamicSurveyForm() {
+  const [mounted, setMounted] = useState(false);
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [formData, setFormData] = useState<{
+    [key: string]: string | string[];
+  }>({});
+  const [loading, setLoading] = useState(true);
+  const [questionIdMap, setQuestionIdMap] = useState<{ [key: string]: number }>(
+    {}
+  );
+  const [currentPage, setCurrentPage] = useState(0);
+  const questionsPerPage = 2;
+
+  // Fetch questions and options from Supabase
+  useEffect(() => {
+    async function fetchQuestions() {
+      try {
+        setLoading(true);
+        // Fetch questions
+        const { data: questionsData, error: questionsError } = await supabase
+          .from("questions")
+          .select("id, question_text, question_type, is_required");
+
+        if (questionsError) {
+          toast.error("Failed to fetch questions: " + questionsError.message);
+          console.error("Questions Error:", questionsError);
+          return;
+        }
+
+        if (!questionsData || questionsData.length === 0) {
+          toast.error("No questions found in database.");
+          setLoading(false);
+          return;
+        }
+
+        // Fetch options
+        const { data: optionsData, error: optionsError } = await supabase
+          .from("question_options")
+          .select("id, question_id, option_text");
+
+        if (optionsError) {
+          toast.error("Failed to fetch options: " + optionsError.message);
+          console.error("Options Error:", optionsError);
+          return;
+        }
+
+        // Map questions to Question interface
+        const mappedQuestions: Question[] = questionsData.map((q) => ({
+          id: q.id.toString(),
+          label: q.question_text,
+          type: q.question_type as QuestionType,
+          required: q.is_required,
+          options: optionsData
+            .filter((opt) => opt.question_id === q.id)
+            .map((opt) => opt.option_text),
+          placeholder:
+            q.question_type === "textarea"
+              ? "Write your response here..."
+              : `Enter your ${q.question_type}`,
+          rows: q.question_type === "textarea" ? 4 : undefined,
+          min: q.question_type === "number" ? 1 : undefined,
+          max: q.question_type === "number" ? 120 : undefined,
+        }));
+
+        setQuestions(mappedQuestions);
+
+        // Initialize formData
+        const initialFormData = mappedQuestions.reduce((acc, q) => {
+          acc[q.id] = q.type === "checkbox" ? [] : "";
+          return acc;
+        }, {} as { [key: string]: string | string[] });
+        setFormData(initialFormData);
+
+        // Create questionIdMap for saving responses
+        const idMap = mappedQuestions.reduce((acc, q) => {
+          acc[q.id] = parseInt(q.id);
+          return acc;
+        }, {} as { [key: string]: number });
+        setQuestionIdMap(idMap);
+
+        setMounted(true);
+        setLoading(false);
+      } catch (err) {
+        toast.error("Error fetching data: " + err.message);
+        console.error("Error:", err);
+        setLoading(false);
+      }
+    }
+    fetchQuestions();
+  }, []);
+
+  // Handle input changes
+  const handleInputChange = (id: string, value: string | string[]) => {
+    setFormData((prev) => ({ ...prev, [id]: value }));
+  };
+
+  // Handle checkbox changes
+  const handleCheckboxChange = (
+    id: string,
+    value: string,
+    checked: boolean
+  ) => {
+    setFormData((prev) => {
+      const currentValues = (prev[id] as string[]) || [];
+      return {
+        ...prev,
+        [id]: checked
+          ? [...currentValues, value]
+          : currentValues.filter((item) => item !== value),
+      };
+    });
+  };
+
+  // Get current page questions
+  const getCurrentQuestions = () => {
+    const start = currentPage * questionsPerPage;
+    const end = start + questionsPerPage;
+    return questions.slice(start, end);
+  };
+
+  // Handle Next button
+  const handleNext = (e: React.MouseEvent) => {
+    e.preventDefault(); // Prevent any form submission
+    setCurrentPage((prev) => prev + 1);
+  };
+
+  // Handle Back button
+  const handleBack = (e: React.MouseEvent) => {
+    e.preventDefault(); // Prevent any form submission
+    setCurrentPage((prev) => prev - 1);
+  };
+
+  // Handle form submission
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Validate required fields (only for Submit)
+    const unanswered = questions.filter(
+      (q) =>
+        q.required &&
+        (q.type === "checkbox"
+          ? (formData[q.id] as string[]).length === 0
+          : !formData[q.id])
+    );
+    if (unanswered.length > 0) {
+      toast.error("Please answer all required questions.");
+      return;
+    }
+
+    try {
+      // Fetch options for accurate option IDs
+      const { data: optionsData } = await supabase
+        .from("question_options")
+        .select("id, question_id, option_text");
+
+      // Map formData to survey_responses
+      const responses = questions.map((q) => {
+        if (q.type === "checkbox") {
+          const selectedOptionIds = (optionsData ?? [])
+            .filter(
+              (opt) =>
+                opt.question_id === parseInt(q.id) &&
+                (formData[q.id] as string[]).includes(opt.option_text)
+            )
+            .map((opt) => opt.id);
+          return {
+            question_id: parseInt(q.id),
+            response_text:
+              (formData[q.id] as string[]).length > 0
+                ? (formData[q.id] as string[]).join(", ")
+                : "",
+            response_option_ids:
+              selectedOptionIds.length > 0 ? selectedOptionIds : null,
+          };
+        } else if (q.type === "radio" || q.type === "dropdown") {
+          const selectedOption = (optionsData ?? []).find(
+            (opt) =>
+              opt.question_id === parseInt(q.id) &&
+              opt.option_text === formData[q.id]
+          );
+          return {
+            question_id: parseInt(q.id),
+            response_text: formData[q.id] as string,
+            response_option_ids: selectedOption ? [selectedOption.id] : null,
+          };
+        } else {
+          return {
+            question_id: parseInt(q.id),
+            response_text: formData[q.id] as string,
+            response_option_ids: null,
+          };
+        }
+      });
+
+      const { error } = await supabase
+        .from("survey_responses")
+        .insert(responses);
+
+      if (error) {
+        toast.error("Failed to save responses: " + error.message);
+        console.error("Response Error:", error);
+        return;
+      }
+
+      toast.success("Form Submitted Successfully!", {
+        description: "Thank you for your response.",
+        duration: 3000,
+      });
+
+      // Reset form and page
+      const resetFormData = questions.reduce((acc, q) => {
+        acc[q.id] = q.type === "checkbox" ? [] : "";
+        return acc;
+      }, {} as { [key: string]: string | string[] });
+      setFormData(resetFormData);
+      setCurrentPage(0);
+    } catch (err) {
+      toast.error("Error saving responses: " + err.message);
+      console.error("Error:", err);
+    }
+  };
+
+  // Render a single question based on type
+  const renderQuestion = (question: Question) => {
+    switch (question.type) {
+      case "text":
+      case "email":
+      case "tel":
+      case "number":
+      case "date":
+        return (
+          <div>
+            <Label htmlFor={question.id} className="text-sm font-medium">
+              {question.label} {question.required && "*"}
+            </Label>
+            <Input
+              id={question.id}
+              type={question.type}
+              value={formData[question.id] as string}
+              onChange={(e) => handleInputChange(question.id, e.target.value)}
+              placeholder={question.placeholder}
+              required={question.required}
+              min={question.min}
+              max={question.max}
+              className="mt-1"
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+          </div>
+        );
+
+      case "radio":
+        return (
+          <div>
+            <Label className="text-sm font-medium mb-3 block">
+              {question.label} {question.required && "*"}
+            </Label>
+            <RadioGroup
+              value={formData[question.id] as string}
+              onValueChange={(value) => handleInputChange(question.id, value)}
+              className="space-y-2"
+            >
+              {question.options?.map((option) => (
+                <div key={option} className="flex items-center space-x-2">
+                  <RadioGroupItem
+                    value={option}
+                    id={`${question.id}-${option}`}
+                  />
+                  <Label htmlFor={`${question.id}-${option}`}>{option}</Label>
+                </div>
+              ))}
+            </RadioGroup>
+          </div>
+        );
+
+      case "checkbox":
+        return (
+          <div>
+            <Label className="text-sm font-medium mb-3 block">
+              {question.label} {question.required && "*"}
+            </Label>
+            <div className="space-y-3">
+              {question.options?.map((option) => (
+                <div key={option} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`${question.id}-${option}`}
+                    checked={(formData[question.id] as string[])?.includes(
+                      option
+                    )}
+                    onCheckedChange={(checked) =>
+                      handleCheckboxChange(
+                        question.id,
+                        option,
+                        checked as boolean
+                      )
+                    }
+                  />
+                  <Label htmlFor={`${question.id}-${option}`}>{option}</Label>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+
+      case "dropdown":
+        return (
+          <div>
+            <Label className="text-sm font-medium mb-2 block">
+              {question.label} {question.required && "*"}
+            </Label>
+            <Select
+              value={formData[question.id] as string}
+              onValueChange={(value) => handleInputChange(question.id, value)}
+            >
+              <SelectTrigger>
+                <SelectValue
+                  placeholder={question.placeholder || "Select an option"}
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {question.options?.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {option}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        );
+
+      case "textarea":
+        return (
+          <div>
+            <Label
+              htmlFor={question.id}
+              className="text-sm font-medium mb-2 block"
+            >
+              {question.label} {question.required && "*"}
+            </Label>
+            <Textarea
+              id={question.id}
+              value={formData[question.id] as string}
+              onChange={(e) => handleInputChange(question.id, e.target.value)}
+              placeholder={question.placeholder}
+              rows={question.rows || 4}
+              className="resize-none"
+            />
+          </div>
+        );
+
+      case "file":
+        return (
+          <div>
+            <Label
+              htmlFor={question.id}
+              className="text-sm font-medium mb-2 block"
+            >
+              {question.label} {question.required && "*"}
+            </Label>
+            <Input
+              id={question.id}
+              type="file"
+              onChange={(e) =>
+                handleInputChange(question.id, e.target.files?.[0]?.name || "")
+              }
+              required={question.required}
+              className="mt-1"
+            />
+            <p className="text-sm text-gray-500 mt-1">
+              Note: File uploads are not saved to Supabase in this example.
+            </p>
+          </div>
+        );
+
+      default:
+        return <p>Unsupported question type: {question.type}</p>;
+    }
+  };
+
+  if (!mounted || loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-8 px-4">
+        <div className="max-w-2xl mx-auto">
+          <div className="animate-pulse">
+            <div className="h-32 bg-gray-200 rounded-lg mb-6"></div>
+            <div className="space-y-6">
+              {[1, 2].map((i) => (
+                <div key={i} className="h-48 bg-gray-200 rounded-lg"></div>
+              ))}
+            </div>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+      </div>
+    );
+  }
+
+  const currentQuestions = getCurrentQuestions();
+  const totalPages = Math.ceil(questions.length / questionsPerPage);
+  const isLastPage = currentPage === totalPages - 1;
+
+  return (
+    <div
+      className="min-h-screen py-8 px-4"
+      style={{
+        backgroundImage: "url('/background.jpg')", // Local image in /public
+        // OR use online URL: `url('https://example.com/background.jpg')`
+        backgroundSize: "cover", // Cover the entire area
+        backgroundPosition: "center", // Center the image
+        backgroundRepeat: "no-repeat", // Prevent tiling
+      }}
+    >
+      {/* Vertical Banner */}
+      {/* <div className="fixed left-0 top-0 h-full w-12 bg-gray-700 bg-opacity-90 flex items-center justify-center z-50">
+        <span
+          className="text-white font-bold text-sm uppercase tracking-wider"
+          style={{
+            writingMode: "vertical-rl",
+            textOrientation: "mixed",
+            transform: "rotate(180deg)",
+          }}
         >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+          SolAlly ML Team
+        </span>
+      </div> */}
+      <div className="fixed left-0 top-0 h-full w-12 bg-gray-700 bg-opacity-90 flex items-center justify-center z-50">
+        <div
+          className="text-white font-black text-lg uppercase tracking-widest h-full flex flex-col justify-center items-center"
+          style={{
+            writingMode: "vertical-rl",
+            textOrientation: "mixed",
+            transform: "rotate(180deg)",
+            letterSpacing: "0.3em",
+            lineHeight: "1.2",
+          }}
         >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+          SolAlly ML Team
+        </div>
+      </div>
+      <div className="min-h-screen bg-trasparent py-8 px-4">
+        <div className="max-w-2xl mx-auto">
+          <Card className="mb-6 bg-gray-500 opacity-75 text-white">
+            <CardHeader className="rounded-t-lg">
+              <CardTitle className="text-2xl">Customer Survey Form</CardTitle>
+              <CardDescription className="text-blue-100">
+                Please fill out this form to help us serve you better. Page{" "}
+                {currentPage + 1} of {totalPages}.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {currentQuestions.map((question, index) => (
+              <Card key={question.id}>
+                <CardHeader>
+                  <CardTitle className="text-lg">
+                    Question {currentPage * questionsPerPage + index + 1}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>{renderQuestion(question)}</CardContent>
+              </Card>
+            ))}
+            <div className="flex justify-between pt-4">
+              {currentPage > 0 && (
+                <Button
+                  type="button"
+                  onClick={handleBack}
+                  className="bg-gray-600 hover:bg-gray-700 text-white px-8 py-2 text-lg"
+                >
+                  Back
+                </Button>
+              )}
+              {!isLastPage ? (
+                <Button
+                  type="button"
+                  onClick={handleNext}
+                  className="bg-green-600 hover:bg-green-700 text-white px-8 py-2 text-lg"
+                >
+                  Next
+                </Button>
+              ) : (
+                <Button
+                  type="submit"
+                  className="bg-green-600 hover:bg-green  -700 text-white px-8 py-2 text-lg"
+                >
+                  Submit Survey
+                </Button>
+              )}
+            </div>
+          </form>
+
+          <div className="text-center mt-8 text-white text-sm z-50 bg-gray-500 opacity-75 p-4 rounded-lg">
+            <p>Thank you for taking the time to complete our survey!</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
