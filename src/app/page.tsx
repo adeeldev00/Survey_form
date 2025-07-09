@@ -692,6 +692,7 @@ export default function DynamicSurveyForm() {
         }, {} as { [key: string]: number });
 
         setQuestionIdMap(idMap);
+        console.log("mappedQuestions", questionIdMap);
         setMounted(true);
         setLoading(false);
       } catch (err) {
@@ -736,30 +737,6 @@ export default function DynamicSurveyForm() {
     });
   };
 
-  const handleMultiSelectChange = (
-    id: string,
-    indicator: string,
-    checked: boolean
-  ) => {
-    setFormData((prev) => {
-      const current = (prev[id] as {
-        indicators: string[];
-        scores: { [key: string]: string };
-      }) || { indicators: [], scores: {} };
-
-      const updatedIndicators = checked
-        ? [...current.indicators, indicator]
-        : current.indicators.filter((i) => i !== indicator);
-
-      return {
-        ...prev,
-        [id]: {
-          indicators: updatedIndicators,
-          scores: { ...current.scores },
-        },
-      };
-    });
-  };
 
   const handleDropdownSelect = (id: string, selectedOption: string) => {
     setFormData((prev) => {
