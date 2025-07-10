@@ -47,7 +47,8 @@ type QuestionType =
   | "date"
   | "file"
   | "multi_select_dropdown"
-  | "table";
+  | "table"
+  | "multi_text";
 
 interface Question {
   id: string;
@@ -61,6 +62,7 @@ interface Question {
   rows?: number;
   maxSelections?: number;
   tableHeadings?: string[];
+  maxEntries?: number; // For muti_text questions
 }
 
 export default function DynamicSurveyForm() {
@@ -76,6 +78,9 @@ export default function DynamicSurveyForm() {
   const [showExplanation, setShowExplanation] = useState<{
     [key: string]: boolean;
   }>({});
+  const [showOtherExplanation, setShowOtherExplanation] = useState<{
+    [key: string]: boolean;
+  }>({});
   // const [questionIdMap, setQuestionIdMap] = useState<{ [key: string]: number }>(
   //   {}
   // );
@@ -83,7 +88,7 @@ export default function DynamicSurveyForm() {
   const [tableRows, setTableRows] = useState<{
     [key: string]: { indicator: string }[];
   }>({}); // Per-question table rows
-  const questionsPerPage = 2;
+  const questionsPerPage = 3;
 
   useEffect(() => {
     async function fetchQuestions() {
@@ -143,6 +148,7 @@ export default function DynamicSurveyForm() {
             options: optionsData
               .filter((opt) => opt.question_id === q.id)
               .map((opt) => opt.option_text),
+            maxEntries: q.question_type === "multi_text" ? 3 : undefined, // Set maxEntries for multi_text
           };
         });
 
@@ -153,6 +159,8 @@ export default function DynamicSurveyForm() {
             acc[q.id] = { indicators: [], scores: {} };
           } else if (q.type === "checkbox") {
             acc[q.id] = [];
+          } else if (q.type === "multi_text") {
+            acc[q.id] = ["", "", ""]; // Initialize with 3 empty slots (q type muti_text)
           } else {
             acc[q.id] = "";
           }
@@ -186,13 +194,28 @@ export default function DynamicSurveyForm() {
     value:
       | string
       | string[]
-      | { indicators: string[]; scores: { [key: string]: string } }
+      | { indicators: string[]; scores: { [key: string]: string } },
+    index?: number // New parameter for multi_text index
   ) => {
-    setFormData((prev) => ({ ...prev, [id]: value }));
+    // setFormData((prev) => ({ ...prev, [id]: value }));
+    setFormData((prev) => {
+      if (typeof index === "number" && Array.isArray(prev[id])) {
+        const updatedValues = [...prev[id]];
+        updatedValues[index] = value as string;
+        return { ...prev, [id]: updatedValues };
+      }
+      return { ...prev, [id]: value };
+    });
     if (typeof value === "string" && value === "Yes") {
       setShowExplanation((prev) => ({ ...prev, [id]: true }));
     } else if (typeof value === "string" && value === "No") {
       setShowExplanation((prev) => ({ ...prev, [id]: false }));
+    }
+    if (id.endsWith("-other")) {
+      const questionId = id.replace("-other", "");
+      if ((formData[questionId] as string[])?.includes("Other")) {
+        setShowOtherExplanation((prev) => ({ ...prev, [questionId]: true }));
+      }
     }
   };
 
@@ -203,11 +226,28 @@ export default function DynamicSurveyForm() {
   ) => {
     setFormData((prev) => {
       const currentValues = (prev[id] as string[]) || [];
+      const updatedValues = checked
+        ? [...currentValues, value]
+        : currentValues.filter((item) => item !== value);
+      if (value === "Other") {
+        setShowOtherExplanation((prev) => ({ ...prev, [id]: checked }));
+        if (checked && !prev[`${id}-other`]) {
+          return {
+            ...prev,
+            [id]: updatedValues,
+            [`${id}-other`]: "",
+          };
+        } else if (!checked) {
+          return {
+            ...prev,
+            [id]: updatedValues,
+            [`${id}-other`]: "",
+          };
+        }
+      }
       return {
         ...prev,
-        [id]: checked
-          ? [...currentValues, value]
-          : currentValues.filter((item) => item !== value),
+        [id]: updatedValues,
       };
     });
   };
@@ -318,67 +358,105 @@ export default function DynamicSurveyForm() {
     return questions.slice(start, end);
   };
 
-
   const validateRequiredFields = (questions: Question[]) => {
-  for (const question of questions) {
-    if (question.required) {
-      const value = formData[question.id];
-      
-      // Handle table validation separately
-      if (question.type === "table" && value) {
-        const tableData = value as { indicators: string[]; scores: { [key: string]: string } };
-        
-        // Check if scores are filled (ignore indicators array)
-        const scoreValues = Object.values(tableData.scores);
-        if (scoreValues.length === 0 || scoreValues.some(score => !score || score.trim() === "")) {
-          return false; // No scores or empty scores
+    for (const question of questions) {
+      if (question.required) {
+        const value = formData[question.id];
+
+        // Handle table validation separately
+        if (question.type === "table" && value) {
+          const tableData = value as {
+            indicators: string[];
+            scores: { [key: string]: string };
+          };
+
+          // Check if scores are filled (ignore indicators array)
+          const scoreValues = Object.values(tableData.scores);
+          if (
+            scoreValues.length === 0 ||
+            scoreValues.some((score) => !score || score.trim() === "")
+          ) {
+            return false; // No scores or empty scores
+          }
+
+          // Table validation passed, continue to next question
+          continue;
         }
-        
-        // Table validation passed, continue to next question
-        continue;
-      }
-      
-      // Original validation for other question types
-      if (
-        !value ||
-        (Array.isArray(value) && value.length === 0) ||
-        (typeof value === 'object' &&
-          value !== null &&
-          'indicators' in value &&
-          (value.indicators === undefined || value.indicators.length === 0))
-      ) {
-        return false; // Unanswered required field
-      }
-      
-      // Rest of your validation logic for other question types...
-      if (question.type === "multi_select_dropdown" && value) {
-        const dropdownData = value as { indicators: string[]; scores: { [key: string]: string } };
-        if (dropdownData.indicators.length === 0) {
-          return false;
+
+        // Original validation for other question types
+        if (
+          !value ||
+          (Array.isArray(value) && value.length === 0) ||
+          (typeof value === "object" &&
+            value !== null &&
+            "indicators" in value &&
+            (value.indicators === undefined || value.indicators.length === 0))
+        ) {
+          return false; // Unanswered required field
         }
-      }
-      
-      if (question.type === "checkbox" && value) {
-        if ((value as string[]).length === 0) {
-          return false;
+
+        if (question.type === "multi_text" && value) {
+          const entries = value as string[];
+          const maxEntries = question.maxEntries || 3;
+          // Check if all defined entries (up to maxEntries) are non-empty
+          for (let i = 0; i < maxEntries; i++) {
+            if (!entries[i] || entries[i].trim() === "") {
+              return false; // Any empty field fails validation
+            }
+          }
         }
-      }
-      
-      if (question.type === "radio" && value) {
-        if (!value || (showExplanation[question.id] && !formData[`${question.id}-explanation`])) {
-          return false;
+
+        // Rest of your validation logic for other question types...
+        if (question.type === "multi_select_dropdown" && value) {
+          const dropdownData = value as {
+            indicators: string[];
+            scores: { [key: string]: string };
+          };
+          if (dropdownData.indicators.length === 0) {
+            return false;
+          }
         }
-      }
-      
-      if (question.type === "text" || question.type === "email" || question.type === "tel" || question.type === "number" || question.type === "date") {
-        if (!value) {
-          return false;
+
+        if (question.type === "checkbox" && value) {
+          const checkboxValues = value as string[];
+          if (checkboxValues.length === 0) {
+            return false;
+          }
+
+          if (
+            checkboxValues.includes("Other") &&
+            (!formData[`${question.id}-other`] ||
+              (formData[`${question.id}-other`] as string).trim() === "")
+          ) {
+            return false;
+          }
+        }
+
+        if (question.type === "radio" && value) {
+          if (
+            !value ||
+            (showExplanation[question.id] &&
+              !formData[`${question.id}-explanation`])
+          ) {
+            return false;
+          }
+        }
+
+        if (
+          question.type === "text" ||
+          question.type === "email" ||
+          question.type === "tel" ||
+          question.type === "number" ||
+          question.type === "date"
+        ) {
+          if (!value) {
+            return false;
+          }
         }
       }
     }
-  }
-  return true;
-};
+    return true;
+  };
 
   const handleNext = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -396,7 +474,6 @@ export default function DynamicSurveyForm() {
     e.preventDefault();
     setCurrentPage((prev) => prev - 1);
   };
-
 
   // Modify handleSubmit
   const handleSubmit = async (e: React.FormEvent) => {
@@ -435,18 +512,31 @@ export default function DynamicSurveyForm() {
               selectedOptionIds.length > 0 ? selectedOptionIds : null,
           };
         } else if (q.type === "checkbox") {
+          const checkboxValues = formData[q.id] as string[];
           const selectedOptionIds = (optionsData ?? [])
             .filter(
               (opt) =>
                 opt.question_id === parseInt(q.id) &&
-                (formData[q.id] as string[]).includes(opt.option_text)
+                checkboxValues.includes(opt.option_text)
             )
             .map((opt) => opt.id);
+          const otherText = checkboxValues.includes("Other")
+            ? ` (Other: ${formData[`${q.id}-other`] || ""})`
+            : "";
           return {
             question_id: parseInt(q.id),
-            response_text: (formData[q.id] as string[]).join(", "),
+            response_text: checkboxValues.join(", ") + otherText,
             response_option_ids:
               selectedOptionIds.length > 0 ? selectedOptionIds : null,
+          };
+        } else if (q.type === "multi_text") {
+          const entries = (formData[q.id] as string[]).filter(
+            (entry) => entry && entry.trim() !== ""
+          );
+          return {
+            question_id: parseInt(q.id),
+            response_text: entries.length > 0 ? entries.join("; ") : "",
+            response_option_ids: null,
           };
         } else if (q.type === "radio") {
           const selectedOption = (optionsData ?? []).find(
@@ -455,13 +545,11 @@ export default function DynamicSurveyForm() {
               opt.option_text === formData[q.id]
           );
           const explanation = showExplanation[q.id]
-            ? (formData[`${q.id}-explanation`] as string)
+            ? ` (Explanation: ${formData[`${q.id}-explanation`] || ""})`
             : "";
           return {
             question_id: parseInt(q.id),
-            response_text:
-              (formData[q.id] as string) +
-              (explanation ? ` (Explanation: ${explanation})` : ""),
+            response_text: (formData[q.id] as string) + explanation,
             response_option_ids: selectedOption ? [selectedOption.id] : null,
           };
         } else {
@@ -498,10 +586,13 @@ export default function DynamicSurveyForm() {
         if (q.type === "radio" && showExplanation[q.id]) {
           acc[`${q.id}-explanation`] = "";
         }
+        if (q.type === "checkbox" && showOtherExplanation[q.id]) {
+          acc[`${q.id}-other`] = "";
+        }
         return acc;
       }, {} as { [key: string]: string | string[] | { indicators: string[]; scores: { [key: string]: string } } });
       setFormData(resetFormData);
-      setTableRows({}); // Reset table rows
+      setTableRows({});
       setCurrentPage(0);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
@@ -606,7 +697,58 @@ export default function DynamicSurveyForm() {
                   <Label htmlFor={`${question.id}-${option}`}>{option}</Label>
                 </div>
               ))}
+              {showOtherExplanation[question.id] && (
+                <div className="mt-4">
+                  <Label className="text-sm font-medium mb-2 block">
+                    Please specify other:
+                  </Label>
+                  <Textarea
+                    id={`${question.id}-other`}
+                    value={(formData[`${question.id}-other`] as string) || ""}
+                    onChange={(e) =>
+                      handleInputChange(`${question.id}-other`, e.target.value)
+                    }
+                    placeholder="Enter your other option here..."
+                    rows={4}
+                    className="resize-none"
+                  />
+                </div>
+              )}
             </div>
+          </div>
+        );
+
+      case "multi_text":
+        const entries = (formData[question.id] as string[]) || [];
+        const maxEntries = question.maxEntries || 3;
+        return (
+          <div>
+            <Label className="text-sm font-medium mb-3 block">
+              {question.label} {question.required && "*"}
+            </Label>
+            {Array.from({ length: maxEntries }, (_, i) => (
+              <div key={i} className="mb-3">
+                <Label
+                  htmlFor={`${question.id}-${i}`}
+                  className="text-sm font-medium"
+                >
+                  {i + 1}.{" "}
+                </Label>
+                <Input
+                  id={`${question.id}-${i}`}
+                  value={entries[i] || ""}
+                  onChange={(e) =>
+                    handleInputChange(question.id, e.target.value, i)
+                  }
+                  placeholder={question.placeholder || "Enter combination"}
+                  className="mt-1"
+                  disabled={
+                    i >= entries.filter(Boolean).length &&
+                    entries.filter(Boolean).length >= maxEntries
+                  }
+                />
+              </div>
+            ))}
           </div>
         );
 
