@@ -334,8 +334,9 @@ export default function DynamicSurveyForm() {
       scores: {},
     };
     if (column !== "Indicator") {
+      const numValue = Math.min(10, Math.max(0, parseInt(value) || 0));
       scores.scores[`${tableRows[id]?.[rowIndex]?.indicator || ""}-${column}`] =
-        value;
+        numValue.toString();
       setFormData((prev) => ({ ...prev, [id]: scores }));
     }
   };
@@ -1038,10 +1039,10 @@ export default function DynamicSurveyForm() {
   const isLastPage = currentPage === totalPages - 1;
 
   return (
-    <div className="min-h-screen py-8 px-4 survey-background">
+    <div className="min-h-screen p-0 md:py-8 md:px-4 survey-background">
       <div className="fixed left-0 top-0 h-full md:w-12 bg-gray-700 bg-opacity-90 flex items-center justify-center z-50">
         <div
-          className="text-white font-black md:text-lg uppercase tracking-widest h-full flex flex-col justify-center items-center"
+          className=" text-white font-black md:text-lg uppercase tracking-widest h-full md:flex flex-col justify-center items-center hidden"
           style={{
             writingMode: "vertical-rl",
             textOrientation: "mixed",
