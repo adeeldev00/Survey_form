@@ -179,6 +179,23 @@ export default function DynamicSurveyForm() {
         }, {} as { [key: string]: string | string[] | { indicators: string[]; scores: { [key: string]: string } } });
 
         setFormData(initialFormData);
+        const initialTableRows = mappedQuestions.reduce((acc, q) => {
+          if (q.type === "table") {
+            acc[q.id] = [{ indicator: "" }]; // Initialize with 2 empty rows
+          }
+          return acc;
+        }, {} as { [key: string]: { indicator: string }[] });
+        setTableRows(initialTableRows);
+
+        const initialDropdownStates = mappedQuestions.reduce((acc, q) => {
+          if (q.type === "multi_select_dropdown") {
+            acc[q.id] = { isOpen: false, searchTerm: "" };
+          }
+          return acc;
+        }, {} as { [key: string]: { isOpen: boolean; searchTerm: string } });
+
+        setDropdownStates(initialDropdownStates);
+
         setMounted(true);
         setLoading(false);
       } catch (err) {
