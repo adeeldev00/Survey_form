@@ -62,6 +62,7 @@ interface Question {
   maxSelections?: number;
   tableHeadings?: string[];
   maxEntries?: number; // For muti_text questions
+  sequence: number;
 }
 
 export default function DynamicSurveyForm() {
@@ -106,8 +107,9 @@ export default function DynamicSurveyForm() {
         const { data: questionsData, error: questionsError } = await supabase
           .from("questions")
           .select(
-            "id, question_text, question_type, is_required, table_headings"
-          );
+            "id, question_text, question_type, is_required, table_headings, sequence"
+          )
+          .order("sequence", { ascending: true });
 
         if (questionsError) {
           toast.error("Failed to fetch questions: " + questionsError.message);
@@ -142,9 +144,9 @@ export default function DynamicSurveyForm() {
             rows: q.question_type === "textarea" ? 4 : undefined,
             min: q.question_type === "number" ? 1 : undefined,
             max: q.question_type === "number" ? 120 : undefined,
+            sequence: q.sequence || 0,
           };
 
-          // Use table_headings from Supabase if available
           if (q.question_type === "table" && q.table_headings) {
             return {
               ...baseQuestion,
@@ -157,7 +159,7 @@ export default function DynamicSurveyForm() {
             options: optionsData
               .filter((opt) => opt.question_id === q.id)
               .map((opt) => opt.option_text),
-            maxEntries: q.question_type === "multi_text" ? 3 : undefined, // Set maxEntries for multi_text
+            maxEntries: q.question_type === "multi_text" ? 3 : undefined,
           };
         });
 
@@ -169,7 +171,7 @@ export default function DynamicSurveyForm() {
           } else if (q.type === "checkbox") {
             acc[q.id] = [];
           } else if (q.type === "multi_text") {
-            acc[q.id] = ["", "", ""]; // Initialize with 3 empty slots (q type muti_text)
+            acc[q.id] = ["", "", ""];
           } else {
             acc[q.id] = "";
           }
@@ -177,31 +179,6 @@ export default function DynamicSurveyForm() {
         }, {} as { [key: string]: string | string[] | { indicators: string[]; scores: { [key: string]: string } } });
 
         setFormData(initialFormData);
-
-        const initialTableRows = mappedQuestions.reduce((acc, q) => {
-          if (q.type === "table") {
-            acc[q.id] = [{ indicator: "" }]; // Initialize with 1 empty rows
-          }
-          return acc;
-        }, {} as { [key: string]: { indicator: string }[] });
-        setTableRows(initialTableRows);
-
-        // Initialize dropdown states for multi_select_dropdown questions
-        const initialDropdownStates = mappedQuestions.reduce((acc, q) => {
-          if (q.type === "multi_select_dropdown") {
-            acc[q.id] = { isOpen: false, searchTerm: "" };
-          }
-          return acc;
-        }, {} as { [key: string]: { isOpen: boolean; searchTerm: string } });
-
-        setDropdownStates(initialDropdownStates);
-
-        // const idMap = mappedQuestions.reduce((acc, q) => {
-        //   acc[q.id] = Number.parseInt(q.id);
-        //   return acc;
-        // }, {} as { [key: string]: number });
-        // setQuestionIdMap(idMap);
-
         setMounted(true);
         setLoading(false);
       } catch (err) {
@@ -215,7 +192,6 @@ export default function DynamicSurveyForm() {
       fetchQuestions();
     }
   }, []);
-
   // Add click outside handler for dropdowns
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
