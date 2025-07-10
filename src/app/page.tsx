@@ -76,9 +76,9 @@ export default function DynamicSurveyForm() {
   const [showExplanation, setShowExplanation] = useState<{
     [key: string]: boolean;
   }>({});
-  const [questionIdMap, setQuestionIdMap] = useState<{ [key: string]: number }>(
-    {}
-  );
+  // const [questionIdMap, setQuestionIdMap] = useState<{ [key: string]: number }>(
+  //   {}
+  // );
   const [currentPage, setCurrentPage] = useState(0);
   const [tableRows, setTableRows] = useState<{ indicator: string }[]>([]); // New state for table rows
   const questionsPerPage = 2;
@@ -159,12 +159,12 @@ export default function DynamicSurveyForm() {
 
         setFormData(initialFormData);
 
-        const idMap = mappedQuestions.reduce((acc, q) => {
-          acc[q.id] = Number.parseInt(q.id);
-          return acc;
-        }, {} as { [key: string]: number });
+        // const idMap = mappedQuestions.reduce((acc, q) => {
+        //   acc[q.id] = Number.parseInt(q.id);
+        //   return acc;
+        // }, {} as { [key: string]: number });
 
-        setQuestionIdMap(idMap);
+        // setQuestionIdMap(idMap);
         setMounted(true);
         setLoading(false);
       } catch (err) {
