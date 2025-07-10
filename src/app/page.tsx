@@ -828,18 +828,15 @@ export default function DynamicSurveyForm() {
           indicators: string[];
           scores: { [key: string]: string };
         }) || { indicators: [], scores: {} };
-
         const availableOptions =
           question.options?.filter(
             (option) => !currentData.indicators.includes(option)
           ) || [];
-
         return (
           <div>
             <Label className="text-sm font-medium mb-2 block">
               {question.label} {question.required && "*"}
             </Label>
-
             <Select
               value=""
               onValueChange={(value) =>
@@ -857,7 +854,6 @@ export default function DynamicSurveyForm() {
                 ))}
               </SelectContent>
             </Select>
-
             {currentData.indicators.length > 0 && (
               <div className="space-y-3">
                 <Label className="text-sm font-medium text-gray-700">
@@ -866,47 +862,61 @@ export default function DynamicSurveyForm() {
                 {currentData.indicators.map((indicator) => (
                   <div
                     key={indicator}
-                    className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg"
+                    className="p-3 bg-gray-100 rounded-lg space-y-2"
                   >
-                    <Badge variant="secondary" className="flex-shrink-0">
-                      <Checkbox
-                        checked={true}
-                        className="mr-2 h-3 w-3"
-                        disabled
-                      />
-                      {indicator}
+                    {/* Mobile-friendly layout: Stack elements vertically */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2 flex-1 min-w-0">
+                        <Checkbox
+                          checked={true}
+                          className="h-3 w-3 flex-shrink-0"
+                          disabled
+                        />
+                        <Badge
+                          variant="secondary"
+                          className="flex-shrink-0 max-w-full truncate"
+                        >
+                          <span className="truncate">{indicator}</span>
+                        </Badge>
+                      </div>
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
-                        className="ml-2 h-4 w-4 p-0 hover:bg-red-100"
+                        className="h-6 w-6 p-0 hover:bg-red-100 flex-shrink-0 ml-2"
                         onClick={() =>
                           handleRemoveIndicator(question.id, indicator)
                         }
                       >
                         <X className="h-3 w-3" />
                       </Button>
-                    </Badge>
-                    <Input
-                      type="number"
-                      min="1"
-                      max="10"
-                      value={currentData.scores[indicator] || ""}
-                      onChange={(e) =>
-                        handleScoreChange(
-                          question.id,
-                          indicator,
-                          e.target.value
-                        )
-                      }
-                      placeholder="Score (1-10)"
-                      className="w-24 flex-shrink-0"
-                    />
+                    </div>
+                    {/* Score input on separate line for mobile */}
+                    <div className="flex items-center space-x-2">
+                      <Label className="text-xs text-gray-600 flex-shrink-0">
+                        Score:
+                      </Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        max="10"
+                        value={currentData.scores[indicator] || ""}
+                        onChange={(e) =>{
+                          const numValue = Math.min(10, Math.max(0, parseInt(e.target.value) || 0));
+                          handleScoreChange(
+                            question.id,
+                            indicator,
+                            numValue.toString()
+                          )
+                        }}
+                        placeholder="1-10"
+                        className="w-20 flex-shrink-0"
+                      />
+                    </div>
                   </div>
                 ))}
               </div>
             )}
-
             {availableOptions.length > 0 &&
               currentData.indicators.length > 0 && (
                 <div className="mt-4 p-3 bg-gray-100 rounded-lg">
