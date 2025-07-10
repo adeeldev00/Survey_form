@@ -1,6 +1,7 @@
 "use client";
 import type React from "react";
 import { useState, useEffect, useRef } from "react";
+import { Progress } from "@/components/ui/progress";
 import {
   Card,
   CardContent,
@@ -455,6 +456,49 @@ export default function DynamicSurveyForm() {
     const start = currentPage * questionsPerPage;
     const end = start + questionsPerPage;
     return questions.slice(start, end);
+  };
+
+  const calculateProgress = () => {
+    let answeredQuestions = 0;
+    const totalQuestions = questions.length;
+
+    questions.forEach((question) => {
+      const value = formData[question.id];
+      let isAnswered = false;
+
+      if (
+        question.type === "multi_select_dropdown" ||
+        question.type === "table"
+      ) {
+        const data = value as {
+          indicators: string[];
+          scores: { [key: string]: string };
+        };
+        isAnswered = data && data.indicators && data.indicators.length > 0;
+      } else if (question.type === "checkbox") {
+        const checkboxValues = value as string[];
+        isAnswered = checkboxValues && checkboxValues.length > 0;
+      } else if (question.type === "multi_text") {
+        const entries = value as string[];
+        isAnswered =
+          entries && entries.some((entry) => entry && entry.trim() !== "");
+      } else {
+        isAnswered = value !== "" && value !== undefined && value !== null;
+      }
+
+      if (isAnswered) {
+        answeredQuestions++;
+      }
+    });
+
+    return {
+      completed: answeredQuestions,
+      total: totalQuestions,
+      percentage:
+        totalQuestions > 0
+          ? Math.round((answeredQuestions / totalQuestions) * 100)
+          : 0,
+    };
   };
 
   const validateRequiredFields = (questions: Question[]) => {
@@ -1342,6 +1386,34 @@ export default function DynamicSurveyForm() {
                 {currentPage + 1} of {totalPages}.
               </CardDescription>
             </CardHeader>
+          </Card>
+          {/* Add this section right after the Customer Survey Form Card and before the <form> tag */}
+          <Card className="mb-6 bg-white">
+            <CardContent className="">
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <Label className="text-sm font-medium text-gray-700">
+                    Form Progress
+                  </Label>
+                  <span className="text-sm text-gray-600">
+                    {calculateProgress().completed} of{" "}
+                    {calculateProgress().total} questions completed
+                  </span>
+                </div>
+                <Progress
+                  value={calculateProgress().percentage}
+                  className="w-full h-2 bg-gray-200 rounded-lg "
+                />
+                <div className="flex justify-between text-xs text-gray-500">
+                  <span>Completed: {calculateProgress().completed}</span>
+                  <span>{calculateProgress().percentage}%</span>
+                  <span>
+                    Remaining:{" "}
+                    {calculateProgress().total - calculateProgress().completed}
+                  </span>
+                </div>
+              </div>
+            </CardContent>
           </Card>
           <form onSubmit={handleSubmit} className="space-y-6">
             {currentQuestions.map((question, index) => (
