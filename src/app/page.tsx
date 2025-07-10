@@ -311,120 +311,280 @@ export default function DynamicSurveyForm() {
     return questions.slice(start, end);
   };
 
-  const handleNext = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setCurrentPage((prev) => prev + 1);
-  };
+  // Add this new validation function above handleNext
+const validateRequiredFields = (questions: Question[]) => {
+  for (const question of questions) {
+    if (question.required) {
+      const value = formData[question.id];
+      if (
+        !value ||
+        (Array.isArray(value) && value.length === 0) ||
+        (typeof value === 'object' &&
+          value !== null &&
+          'indicators' in value &&
+          (value.indicators === undefined || value.indicators.length === 0))
+      ) {
+        return false; // Unanswered required field
+      }
+      // Specific checks for different question types
+      if (question.type === "table" && value) {
+        const tableData = value as { indicators: string[]; scores: { [key: string]: string } };
+        if (tableData.indicators.length === 0 || Object.values(tableData.scores).some(score => !score)) {
+          return false; // Empty table or incomplete scores
+        }
+      }
+      if (question.type === "multi_select_dropdown" && value) {
+        const dropdownData = value as { indicators: string[]; scores: { [key: string]: string } };
+        if (dropdownData.indicators.length === 0) {
+          return false; // No indicators selected
+        }
+      }
+      if (question.type === "checkbox" && value) {
+        if ((value as string[]).length === 0) {
+          return false; // No checkboxes selected
+        }
+      }
+      if (question.type === "radio" && value) {
+        if (!value || (showExplanation[question.id] && !formData[`${question.id}-explanation`])) {
+          return false; // No radio selected or missing explanation
+        }
+      }
+    }
+  }
+  return true; // All required fields are filled
+};
+
+const handleNext = (e: React.MouseEvent) => {
+  e.preventDefault();
+  const currentQuestions = getCurrentQuestions();
+  if (!validateRequiredFields(currentQuestions)) {
+    toast.error("Please fill all required fields (*) on this page before proceeding.");
+    return;
+  }
+  setCurrentPage((prev) => prev + 1);
+};
 
   const handleBack = (e: React.MouseEvent) => {
     e.preventDefault();
     setCurrentPage((prev) => prev - 1);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const { data: optionsData } = await supabase
-        .from("question_options")
-        .select("id, question_id, option_text");
+  // const handleSubmit = async (e: React.FormEvent) => {
+  //   e.preventDefault();
+  //   try {
+  //     const { data: optionsData } = await supabase
+  //       .from("question_options")
+  //       .select("id, question_id, option_text");
 
-      const responses = questions.map((q) => {
-        if (q.type === "multi_select_dropdown" || q.type === "table") {
-          const current = formData[q.id] as {
-            indicators: string[];
-            scores: { [key: string]: string };
-          };
-          const selectedOptionIds = (optionsData ?? [])
-            .filter(
-              (opt) =>
-                opt.question_id === parseInt(q.id) &&
-                current.indicators.includes(opt.option_text)
-            )
-            .map((opt) => opt.id);
-          return {
-            question_id: parseInt(q.id),
-            response_text:
-              current.indicators.join(", ") +
-              (Object.keys(current.scores).length
-                ? ` (Scores: ${JSON.stringify(current.scores)})`
-                : ""),
-            response_option_ids:
-              selectedOptionIds.length > 0 ? selectedOptionIds : null,
-          };
-        } else if (q.type === "checkbox") {
-          const selectedOptionIds = (optionsData ?? [])
-            .filter(
-              (opt) =>
-                opt.question_id === parseInt(q.id) &&
-                (formData[q.id] as string[]).includes(opt.option_text)
-            )
-            .map((opt) => opt.id);
-          return {
-            question_id: parseInt(q.id),
-            response_text: (formData[q.id] as string[]).join(", "),
-            response_option_ids:
-              selectedOptionIds.length > 0 ? selectedOptionIds : null,
-          };
-        } else if (q.type === "radio") {
-          const selectedOption = (optionsData ?? []).find(
+  //     const responses = questions.map((q) => {
+  //       if (q.type === "multi_select_dropdown" || q.type === "table") {
+  //         const current = formData[q.id] as {
+  //           indicators: string[];
+  //           scores: { [key: string]: string };
+  //         };
+  //         const selectedOptionIds = (optionsData ?? [])
+  //           .filter(
+  //             (opt) =>
+  //               opt.question_id === parseInt(q.id) &&
+  //               current.indicators.includes(opt.option_text)
+  //           )
+  //           .map((opt) => opt.id);
+  //         return {
+  //           question_id: parseInt(q.id),
+  //           response_text:
+  //             current.indicators.join(", ") +
+  //             (Object.keys(current.scores).length
+  //               ? ` (Scores: ${JSON.stringify(current.scores)})`
+  //               : ""),
+  //           response_option_ids:
+  //             selectedOptionIds.length > 0 ? selectedOptionIds : null,
+  //         };
+  //       } else if (q.type === "checkbox") {
+  //         const selectedOptionIds = (optionsData ?? [])
+  //           .filter(
+  //             (opt) =>
+  //               opt.question_id === parseInt(q.id) &&
+  //               (formData[q.id] as string[]).includes(opt.option_text)
+  //           )
+  //           .map((opt) => opt.id);
+  //         return {
+  //           question_id: parseInt(q.id),
+  //           response_text: (formData[q.id] as string[]).join(", "),
+  //           response_option_ids:
+  //             selectedOptionIds.length > 0 ? selectedOptionIds : null,
+  //         };
+  //       } else if (q.type === "radio") {
+  //         const selectedOption = (optionsData ?? []).find(
+  //           (opt) =>
+  //             opt.question_id === parseInt(q.id) &&
+  //             opt.option_text === formData[q.id]
+  //         );
+  //         const explanation = showExplanation[q.id]
+  //           ? (formData[`${q.id}-explanation`] as string)
+  //           : "";
+  //         return {
+  //           question_id: parseInt(q.id),
+  //           response_text:
+  //             (formData[q.id] as string) +
+  //             (explanation ? ` (Explanation: ${explanation})` : ""),
+  //           response_option_ids: selectedOption ? [selectedOption.id] : null,
+  //         };
+  //       } else {
+  //         return {
+  //           question_id: parseInt(q.id),
+  //           response_text: formData[q.id] as string,
+  //           response_option_ids: null,
+  //         };
+  //       }
+  //     });
+
+  //     const { error } = await supabase
+  //       .from("survey_responses")
+  //       .insert(responses);
+
+  //     if (error) {
+  //       toast.error("Failed to save responses: " + error.message);
+  //       return;
+  //     }
+
+  //     toast.success("Form Submitted Successfully!", {
+  //       description: "Thank you for your response.",
+  //       duration: 3000,
+  //     });
+
+  //     const resetFormData = questions.reduce((acc, q) => {
+  //       if (q.type === "multi_select_dropdown" || q.type === "table") {
+  //         acc[q.id] = { indicators: [], scores: {} };
+  //       } else if (q.type === "checkbox") {
+  //         acc[q.id] = [];
+  //       } else {
+  //         acc[q.id] = "";
+  //       }
+  //       if (q.type === "radio" && showExplanation[q.id]) {
+  //         acc[`${q.id}-explanation`] = "";
+  //       }
+  //       return acc;
+  //     }, {} as { [key: string]: string | string[] | { indicators: string[]; scores: { [key: string]: string } } });
+  //     setFormData(resetFormData);
+  //     setTableRows([]); // Reset table rows
+  //     setCurrentPage(0);
+  //   } catch (err) {
+  //     const errorMessage = err instanceof Error ? err.message : String(err);
+  //     toast.error("Error saving responses: " + errorMessage);
+  //   }
+  // };
+
+
+  // Modify handleSubmit
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  const currentQuestions = getCurrentQuestions();
+  if (!validateRequiredFields(currentQuestions)) {
+    toast.error("Please fill all required fields (*) before submitting.");
+    return;
+  }
+  try {
+    const { data: optionsData } = await supabase
+      .from("question_options")
+      .select("id, question_id, option_text");
+
+    const responses = questions.map((q) => {
+      if (q.type === "multi_select_dropdown" || q.type === "table") {
+        const current = formData[q.id] as {
+          indicators: string[];
+          scores: { [key: string]: string };
+        };
+        const selectedOptionIds = (optionsData ?? [])
+          .filter(
             (opt) =>
               opt.question_id === parseInt(q.id) &&
-              opt.option_text === formData[q.id]
-          );
-          const explanation = showExplanation[q.id]
-            ? (formData[`${q.id}-explanation`] as string)
-            : "";
-          return {
-            question_id: parseInt(q.id),
-            response_text:
-              (formData[q.id] as string) +
-              (explanation ? ` (Explanation: ${explanation})` : ""),
-            response_option_ids: selectedOption ? [selectedOption.id] : null,
-          };
-        } else {
-          return {
-            question_id: parseInt(q.id),
-            response_text: formData[q.id] as string,
-            response_option_ids: null,
-          };
-        }
-      });
-
-      const { error } = await supabase
-        .from("survey_responses")
-        .insert(responses);
-
-      if (error) {
-        toast.error("Failed to save responses: " + error.message);
-        return;
+              current.indicators.includes(opt.option_text)
+          )
+          .map((opt) => opt.id);
+        return {
+          question_id: parseInt(q.id),
+          response_text:
+            current.indicators.join(", ") +
+            (Object.keys(current.scores).length
+              ? ` (Scores: ${JSON.stringify(current.scores)})`
+              : ""),
+          response_option_ids:
+            selectedOptionIds.length > 0 ? selectedOptionIds : null,
+        };
+      } else if (q.type === "checkbox") {
+        const selectedOptionIds = (optionsData ?? [])
+          .filter(
+            (opt) =>
+              opt.question_id === parseInt(q.id) &&
+              (formData[q.id] as string[]).includes(opt.option_text)
+          )
+          .map((opt) => opt.id);
+        return {
+          question_id: parseInt(q.id),
+          response_text: (formData[q.id] as string[]).join(", "),
+          response_option_ids:
+            selectedOptionIds.length > 0 ? selectedOptionIds : null,
+        };
+      } else if (q.type === "radio") {
+        const selectedOption = (optionsData ?? []).find(
+          (opt) =>
+            opt.question_id === parseInt(q.id) &&
+            opt.option_text === formData[q.id]
+        );
+        const explanation = showExplanation[q.id]
+          ? (formData[`${q.id}-explanation`] as string)
+          : "";
+        return {
+          question_id: parseInt(q.id),
+          response_text:
+            (formData[q.id] as string) +
+            (explanation ? ` (Explanation: ${explanation})` : ""),
+          response_option_ids: selectedOption ? [selectedOption.id] : null,
+        };
+      } else {
+        return {
+          question_id: parseInt(q.id),
+          response_text: formData[q.id] as string,
+          response_option_ids: null,
+        };
       }
+    });
 
-      toast.success("Form Submitted Successfully!", {
-        description: "Thank you for your response.",
-        duration: 3000,
-      });
+    const { error } = await supabase
+      .from("survey_responses")
+      .insert(responses);
 
-      const resetFormData = questions.reduce((acc, q) => {
-        if (q.type === "multi_select_dropdown" || q.type === "table") {
-          acc[q.id] = { indicators: [], scores: {} };
-        } else if (q.type === "checkbox") {
-          acc[q.id] = [];
-        } else {
-          acc[q.id] = "";
-        }
-        if (q.type === "radio" && showExplanation[q.id]) {
-          acc[`${q.id}-explanation`] = "";
-        }
-        return acc;
-      }, {} as { [key: string]: string | string[] | { indicators: string[]; scores: { [key: string]: string } } });
-      setFormData(resetFormData);
-      setTableRows([]); // Reset table rows
-      setCurrentPage(0);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      toast.error("Error saving responses: " + errorMessage);
+    if (error) {
+      toast.error("Failed to save responses: " + error.message);
+      return;
     }
-  };
+
+    toast.success("Form Submitted Successfully!", {
+      description: "Thank you for your response.",
+      duration: 3000,
+    });
+
+    const resetFormData = questions.reduce((acc, q) => {
+      if (q.type === "multi_select_dropdown" || q.type === "table") {
+        acc[q.id] = { indicators: [], scores: {} };
+      } else if (q.type === "checkbox") {
+        acc[q.id] = [];
+      } else {
+        acc[q.id] = "";
+      }
+      if (q.type === "radio" && showExplanation[q.id]) {
+        acc[`${q.id}-explanation`] = "";
+      }
+      return acc;
+    }, {} as { [key: string]: string | string[] | { indicators: string[]; scores: { [key: string]: string } } });
+    setFormData(resetFormData);
+    setTableRows([]); // Reset table rows
+    setCurrentPage(0);
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    toast.error("Error saving responses: " + errorMessage);
+  }
+};
 
   const renderQuestion = (question: Question) => {
     switch (question.type) {
