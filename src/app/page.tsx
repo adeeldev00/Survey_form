@@ -80,7 +80,9 @@ export default function DynamicSurveyForm() {
   //   {}
   // );
   const [currentPage, setCurrentPage] = useState(0);
-  const [tableRows, setTableRows] = useState<{ indicator: string }[]>([]); // New state for table rows
+  const [tableRows, setTableRows] = useState<{
+    [key: string]: { indicator: string }[];
+  }>({}); // Per-question table rows
   const questionsPerPage = 2;
 
   useEffect(() => {
@@ -277,26 +279,32 @@ export default function DynamicSurveyForm() {
     column: string,
     value: string
   ) => {
-    const newRows = [...tableRows];
-    if (column === "Indicator") {
-      newRows[rowIndex] = { ...newRows[rowIndex], indicator: value };
-    } else {
-      const scores = (formData[id] as {
-        indicators: string[];
-        scores: { [key: string]: string };
-      }) || {
-        indicators: [],
-        scores: {},
-      };
-      scores.scores[`${newRows[rowIndex].indicator}-${column}`] = value;
+    setTableRows((prev) => {
+      const newRows = [...(prev[id] || [])];
+      if (column === "Indicator") {
+        newRows[rowIndex] = { ...newRows[rowIndex], indicator: value };
+      }
+      return { ...prev, [id]: newRows };
+    });
+    const scores = (formData[id] as {
+      indicators: string[];
+      scores: { [key: string]: string };
+    }) || {
+      indicators: [],
+      scores: {},
+    };
+    if (column !== "Indicator") {
+      scores.scores[`${tableRows[id]?.[rowIndex]?.indicator || ""}-${column}`] =
+        value;
       setFormData((prev) => ({ ...prev, [id]: scores }));
     }
-    setTableRows(newRows);
   };
 
   const addRow = (id: string) => {
-    setTableRows((prev) => [...prev, { indicator: "" }]);
-    // Ensure formData is initialized for the table question
+    setTableRows((prev) => ({
+      ...prev,
+      [id]: [...(prev[id] || []), { indicator: "" }],
+    }));
     if (!formData[id]) {
       setFormData((prev) => ({
         ...prev,
@@ -304,18 +312,33 @@ export default function DynamicSurveyForm() {
       }));
     }
   };
-
   const getCurrentQuestions = () => {
     const start = currentPage * questionsPerPage;
     const end = start + questionsPerPage;
     return questions.slice(start, end);
   };
 
-  // Add this new validation function above handleNext
-const validateRequiredFields = (questions: Question[]) => {
+
+  const validateRequiredFields = (questions: Question[]) => {
   for (const question of questions) {
     if (question.required) {
       const value = formData[question.id];
+      
+      // Handle table validation separately
+      if (question.type === "table" && value) {
+        const tableData = value as { indicators: string[]; scores: { [key: string]: string } };
+        
+        // Check if scores are filled (ignore indicators array)
+        const scoreValues = Object.values(tableData.scores);
+        if (scoreValues.length === 0 || scoreValues.some(score => !score || score.trim() === "")) {
+          return false; // No scores or empty scores
+        }
+        
+        // Table validation passed, continue to next question
+        continue;
+      }
+      
+      // Original validation for other question types
       if (
         !value ||
         (Array.isArray(value) && value.length === 0) ||
@@ -326,265 +349,165 @@ const validateRequiredFields = (questions: Question[]) => {
       ) {
         return false; // Unanswered required field
       }
-      // Specific checks for different question types
-      if (question.type === "table" && value) {
-        const tableData = value as { indicators: string[]; scores: { [key: string]: string } };
-        if (tableData.indicators.length === 0 || Object.values(tableData.scores).some(score => !score)) {
-          return false; // Empty table or incomplete scores
-        }
-      }
+      
+      // Rest of your validation logic for other question types...
       if (question.type === "multi_select_dropdown" && value) {
         const dropdownData = value as { indicators: string[]; scores: { [key: string]: string } };
         if (dropdownData.indicators.length === 0) {
-          return false; // No indicators selected
+          return false;
         }
       }
+      
       if (question.type === "checkbox" && value) {
         if ((value as string[]).length === 0) {
-          return false; // No checkboxes selected
+          return false;
         }
       }
+      
       if (question.type === "radio" && value) {
         if (!value || (showExplanation[question.id] && !formData[`${question.id}-explanation`])) {
-          return false; // No radio selected or missing explanation
+          return false;
+        }
+      }
+      
+      if (question.type === "text" || question.type === "email" || question.type === "tel" || question.type === "number" || question.type === "date") {
+        if (!value) {
+          return false;
         }
       }
     }
   }
-  return true; // All required fields are filled
+  return true;
 };
 
-const handleNext = (e: React.MouseEvent) => {
-  e.preventDefault();
-  const currentQuestions = getCurrentQuestions();
-  if (!validateRequiredFields(currentQuestions)) {
-    toast.error("Please fill all required fields (*) on this page before proceeding.");
-    return;
-  }
-  setCurrentPage((prev) => prev + 1);
-};
+  const handleNext = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const currentQuestions = getCurrentQuestions();
+    if (!validateRequiredFields(currentQuestions)) {
+      toast.error(
+        "Please fill all required fields (*) on this page before proceeding."
+      );
+      return;
+    }
+    setCurrentPage((prev) => prev + 1);
+  };
 
   const handleBack = (e: React.MouseEvent) => {
     e.preventDefault();
     setCurrentPage((prev) => prev - 1);
   };
 
-  // const handleSubmit = async (e: React.FormEvent) => {
-  //   e.preventDefault();
-  //   try {
-  //     const { data: optionsData } = await supabase
-  //       .from("question_options")
-  //       .select("id, question_id, option_text");
-
-  //     const responses = questions.map((q) => {
-  //       if (q.type === "multi_select_dropdown" || q.type === "table") {
-  //         const current = formData[q.id] as {
-  //           indicators: string[];
-  //           scores: { [key: string]: string };
-  //         };
-  //         const selectedOptionIds = (optionsData ?? [])
-  //           .filter(
-  //             (opt) =>
-  //               opt.question_id === parseInt(q.id) &&
-  //               current.indicators.includes(opt.option_text)
-  //           )
-  //           .map((opt) => opt.id);
-  //         return {
-  //           question_id: parseInt(q.id),
-  //           response_text:
-  //             current.indicators.join(", ") +
-  //             (Object.keys(current.scores).length
-  //               ? ` (Scores: ${JSON.stringify(current.scores)})`
-  //               : ""),
-  //           response_option_ids:
-  //             selectedOptionIds.length > 0 ? selectedOptionIds : null,
-  //         };
-  //       } else if (q.type === "checkbox") {
-  //         const selectedOptionIds = (optionsData ?? [])
-  //           .filter(
-  //             (opt) =>
-  //               opt.question_id === parseInt(q.id) &&
-  //               (formData[q.id] as string[]).includes(opt.option_text)
-  //           )
-  //           .map((opt) => opt.id);
-  //         return {
-  //           question_id: parseInt(q.id),
-  //           response_text: (formData[q.id] as string[]).join(", "),
-  //           response_option_ids:
-  //             selectedOptionIds.length > 0 ? selectedOptionIds : null,
-  //         };
-  //       } else if (q.type === "radio") {
-  //         const selectedOption = (optionsData ?? []).find(
-  //           (opt) =>
-  //             opt.question_id === parseInt(q.id) &&
-  //             opt.option_text === formData[q.id]
-  //         );
-  //         const explanation = showExplanation[q.id]
-  //           ? (formData[`${q.id}-explanation`] as string)
-  //           : "";
-  //         return {
-  //           question_id: parseInt(q.id),
-  //           response_text:
-  //             (formData[q.id] as string) +
-  //             (explanation ? ` (Explanation: ${explanation})` : ""),
-  //           response_option_ids: selectedOption ? [selectedOption.id] : null,
-  //         };
-  //       } else {
-  //         return {
-  //           question_id: parseInt(q.id),
-  //           response_text: formData[q.id] as string,
-  //           response_option_ids: null,
-  //         };
-  //       }
-  //     });
-
-  //     const { error } = await supabase
-  //       .from("survey_responses")
-  //       .insert(responses);
-
-  //     if (error) {
-  //       toast.error("Failed to save responses: " + error.message);
-  //       return;
-  //     }
-
-  //     toast.success("Form Submitted Successfully!", {
-  //       description: "Thank you for your response.",
-  //       duration: 3000,
-  //     });
-
-  //     const resetFormData = questions.reduce((acc, q) => {
-  //       if (q.type === "multi_select_dropdown" || q.type === "table") {
-  //         acc[q.id] = { indicators: [], scores: {} };
-  //       } else if (q.type === "checkbox") {
-  //         acc[q.id] = [];
-  //       } else {
-  //         acc[q.id] = "";
-  //       }
-  //       if (q.type === "radio" && showExplanation[q.id]) {
-  //         acc[`${q.id}-explanation`] = "";
-  //       }
-  //       return acc;
-  //     }, {} as { [key: string]: string | string[] | { indicators: string[]; scores: { [key: string]: string } } });
-  //     setFormData(resetFormData);
-  //     setTableRows([]); // Reset table rows
-  //     setCurrentPage(0);
-  //   } catch (err) {
-  //     const errorMessage = err instanceof Error ? err.message : String(err);
-  //     toast.error("Error saving responses: " + errorMessage);
-  //   }
-  // };
-
 
   // Modify handleSubmit
-const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  const currentQuestions = getCurrentQuestions();
-  if (!validateRequiredFields(currentQuestions)) {
-    toast.error("Please fill all required fields (*) before submitting.");
-    return;
-  }
-  try {
-    const { data: optionsData } = await supabase
-      .from("question_options")
-      .select("id, question_id, option_text");
-
-    const responses = questions.map((q) => {
-      if (q.type === "multi_select_dropdown" || q.type === "table") {
-        const current = formData[q.id] as {
-          indicators: string[];
-          scores: { [key: string]: string };
-        };
-        const selectedOptionIds = (optionsData ?? [])
-          .filter(
-            (opt) =>
-              opt.question_id === parseInt(q.id) &&
-              current.indicators.includes(opt.option_text)
-          )
-          .map((opt) => opt.id);
-        return {
-          question_id: parseInt(q.id),
-          response_text:
-            current.indicators.join(", ") +
-            (Object.keys(current.scores).length
-              ? ` (Scores: ${JSON.stringify(current.scores)})`
-              : ""),
-          response_option_ids:
-            selectedOptionIds.length > 0 ? selectedOptionIds : null,
-        };
-      } else if (q.type === "checkbox") {
-        const selectedOptionIds = (optionsData ?? [])
-          .filter(
-            (opt) =>
-              opt.question_id === parseInt(q.id) &&
-              (formData[q.id] as string[]).includes(opt.option_text)
-          )
-          .map((opt) => opt.id);
-        return {
-          question_id: parseInt(q.id),
-          response_text: (formData[q.id] as string[]).join(", "),
-          response_option_ids:
-            selectedOptionIds.length > 0 ? selectedOptionIds : null,
-        };
-      } else if (q.type === "radio") {
-        const selectedOption = (optionsData ?? []).find(
-          (opt) =>
-            opt.question_id === parseInt(q.id) &&
-            opt.option_text === formData[q.id]
-        );
-        const explanation = showExplanation[q.id]
-          ? (formData[`${q.id}-explanation`] as string)
-          : "";
-        return {
-          question_id: parseInt(q.id),
-          response_text:
-            (formData[q.id] as string) +
-            (explanation ? ` (Explanation: ${explanation})` : ""),
-          response_option_ids: selectedOption ? [selectedOption.id] : null,
-        };
-      } else {
-        return {
-          question_id: parseInt(q.id),
-          response_text: formData[q.id] as string,
-          response_option_ids: null,
-        };
-      }
-    });
-
-    const { error } = await supabase
-      .from("survey_responses")
-      .insert(responses);
-
-    if (error) {
-      toast.error("Failed to save responses: " + error.message);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const currentQuestions = getCurrentQuestions();
+    if (!validateRequiredFields(currentQuestions)) {
+      toast.error("Please fill all required fields (*) before submitting.");
       return;
     }
+    try {
+      const { data: optionsData } = await supabase
+        .from("question_options")
+        .select("id, question_id, option_text");
 
-    toast.success("Form Submitted Successfully!", {
-      description: "Thank you for your response.",
-      duration: 3000,
-    });
+      const responses = questions.map((q) => {
+        if (q.type === "multi_select_dropdown" || q.type === "table") {
+          const current = formData[q.id] as {
+            indicators: string[];
+            scores: { [key: string]: string };
+          };
+          const selectedOptionIds = (optionsData ?? [])
+            .filter(
+              (opt) =>
+                opt.question_id === parseInt(q.id) &&
+                current.indicators.includes(opt.option_text)
+            )
+            .map((opt) => opt.id);
+          return {
+            question_id: parseInt(q.id),
+            response_text:
+              current.indicators.join(", ") +
+              (Object.keys(current.scores).length
+                ? ` (Scores: ${JSON.stringify(current.scores)})`
+                : ""),
+            response_option_ids:
+              selectedOptionIds.length > 0 ? selectedOptionIds : null,
+          };
+        } else if (q.type === "checkbox") {
+          const selectedOptionIds = (optionsData ?? [])
+            .filter(
+              (opt) =>
+                opt.question_id === parseInt(q.id) &&
+                (formData[q.id] as string[]).includes(opt.option_text)
+            )
+            .map((opt) => opt.id);
+          return {
+            question_id: parseInt(q.id),
+            response_text: (formData[q.id] as string[]).join(", "),
+            response_option_ids:
+              selectedOptionIds.length > 0 ? selectedOptionIds : null,
+          };
+        } else if (q.type === "radio") {
+          const selectedOption = (optionsData ?? []).find(
+            (opt) =>
+              opt.question_id === parseInt(q.id) &&
+              opt.option_text === formData[q.id]
+          );
+          const explanation = showExplanation[q.id]
+            ? (formData[`${q.id}-explanation`] as string)
+            : "";
+          return {
+            question_id: parseInt(q.id),
+            response_text:
+              (formData[q.id] as string) +
+              (explanation ? ` (Explanation: ${explanation})` : ""),
+            response_option_ids: selectedOption ? [selectedOption.id] : null,
+          };
+        } else {
+          return {
+            question_id: parseInt(q.id),
+            response_text: formData[q.id] as string,
+            response_option_ids: null,
+          };
+        }
+      });
 
-    const resetFormData = questions.reduce((acc, q) => {
-      if (q.type === "multi_select_dropdown" || q.type === "table") {
-        acc[q.id] = { indicators: [], scores: {} };
-      } else if (q.type === "checkbox") {
-        acc[q.id] = [];
-      } else {
-        acc[q.id] = "";
+      const { error } = await supabase
+        .from("survey_responses")
+        .insert(responses);
+
+      if (error) {
+        toast.error("Failed to save responses: " + error.message);
+        return;
       }
-      if (q.type === "radio" && showExplanation[q.id]) {
-        acc[`${q.id}-explanation`] = "";
-      }
-      return acc;
-    }, {} as { [key: string]: string | string[] | { indicators: string[]; scores: { [key: string]: string } } });
-    setFormData(resetFormData);
-    setTableRows([]); // Reset table rows
-    setCurrentPage(0);
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err);
-    toast.error("Error saving responses: " + errorMessage);
-  }
-};
+
+      toast.success("Form Submitted Successfully!", {
+        description: "Thank you for your response.",
+        duration: 3000,
+      });
+
+      const resetFormData = questions.reduce((acc, q) => {
+        if (q.type === "multi_select_dropdown" || q.type === "table") {
+          acc[q.id] = { indicators: [], scores: {} };
+        } else if (q.type === "checkbox") {
+          acc[q.id] = [];
+        } else {
+          acc[q.id] = "";
+        }
+        if (q.type === "radio" && showExplanation[q.id]) {
+          acc[`${q.id}-explanation`] = "";
+        }
+        return acc;
+      }, {} as { [key: string]: string | string[] | { indicators: string[]; scores: { [key: string]: string } } });
+      setFormData(resetFormData);
+      setTableRows({}); // Reset table rows
+      setCurrentPage(0);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      toast.error("Error saving responses: " + errorMessage);
+    }
+  };
 
   const renderQuestion = (question: Question) => {
     switch (question.type) {
@@ -888,7 +811,7 @@ const handleSubmit = async (e: React.FormEvent) => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {tableRows.map((row, index) => (
+                {(tableRows[question.id] || []).map((row, index) => (
                   <TableRow key={index}>
                     <TableCell>
                       <Input
