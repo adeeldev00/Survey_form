@@ -523,7 +523,27 @@ export default function DynamicSurveyForm() {
             indicators: string[];
             scores: { [key: string]: string };
           };
-          // Check if scores are filled (ignore indicators array)
+          const rows = tableRows[question.id] || [];
+          // Specific validation for ID 10: Require exactly 3 rows with all data
+        if (question.id === "10") {
+          if (rows.length !== 3) {
+            return `Please provide exactly 3 examples for "${question.label}".`;
+          }
+          for (const row of rows) {
+            if (!row.indicator || row.indicator.trim() === "") {
+              return `Please fill the indicator for each example in "${question.label}".`;
+            }
+            const scoreKeys = Object.keys(tableData.scores).filter(key =>
+              key.startsWith(`${row.indicator}-`)
+            );
+            if (
+              scoreKeys.length < 3 ||
+              scoreKeys.some(key => !tableData.scores[key] || tableData.scores[key].trim() === "")
+            ) {
+              return `Please fill all scores for each example in "${question.label}".`;
+            }
+          }
+          } else {
           const scoreValues = Object.values(tableData.scores);
           if (
             scoreValues.length === 0 ||
@@ -531,9 +551,9 @@ export default function DynamicSurveyForm() {
           ) {
             return `All fields for "${question.label}" must be filled.`; // No scores or empty scores
           }
-          // Table validation passed, continue to next question
-          continue;
         }
+        continue;
+      }
 
         // Original validation for other question types
         if (
@@ -544,7 +564,7 @@ export default function DynamicSurveyForm() {
             "indicators" in value &&
             (value.indicators === undefined || value.indicators.length === 0))
         ) {
-          return `Please fill all scores for "${question.label}".`; // Unanswered required field
+          return `The field "${question.label}" is required.`; // Unanswered required field
         }
 
         if (question.type === "multi_text" && value) {
@@ -564,8 +584,23 @@ export default function DynamicSurveyForm() {
             indicators: string[];
             scores: { [key: string]: string };
           };
+          if (dropdownData.indicators.length < 10) {
+            // New validation for 10 indicators
+            return `Please select exactly 10 indicators for "${question.label}".`;
+          }
           if (dropdownData.indicators.length === 0) {
             return `Please select at least one option for "${question.label}".`;
+          }
+          if (dropdownData.indicators.length === 10) {
+            const allScoresFilled = dropdownData.indicators.every(
+              (indicator) =>
+                dropdownData.scores[`${indicator}-Score`] &&
+                parseInt(dropdownData.scores[`${indicator}-Score`]) >= 1 &&
+                parseInt(dropdownData.scores[`${indicator}-Score`]) <= 10
+            );
+            if (!allScoresFilled) {
+              return `Please assign a score (1-10) for each selected indicator in "${question.label}".`;
+            }
           }
         }
 
