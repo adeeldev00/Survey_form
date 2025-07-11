@@ -101,6 +101,9 @@ export default function DynamicSurveyForm() {
 
   const questionsPerPage = 3;
 
+  //gmail validation regex
+  const gmailRegex = /^[a-zA-Z0-9._-]+@gmail\.com$/;
+
   useEffect(() => {
     async function fetchQuestions() {
       try {
@@ -249,6 +252,7 @@ export default function DynamicSurveyForm() {
     index?: number // New parameter for multi_text index
   ) => {
     // setFormData((prev) => ({ ...prev, [id]: value }));
+    toast.dismiss();
     setFormData((prev) => {
       if (typeof index === "number" && Array.isArray(prev[id])) {
         const updatedValues = [...prev[id]];
@@ -501,11 +505,18 @@ export default function DynamicSurveyForm() {
     };
   };
 
-  const validateRequiredFields = (questions: Question[]) => {
+  const validateRequiredFields = (questions: Question[]): string | null => {
     for (const question of questions) {
       if (question.required) {
         const value = formData[question.id];
 
+        //this validation is for gmail email
+        if (question.id === "14" && value) {
+          const email = value as string;
+          if (!gmailRegex.test(email)) {
+            return "Please enter a valid Gmail address (e.g., example@gmail.com) for 'Provide Your Gmail'.";
+          }
+        }
         // Handle table validation separately
         if (question.type === "table" && value) {
           const tableData = value as {
@@ -518,7 +529,7 @@ export default function DynamicSurveyForm() {
             scoreValues.length === 0 ||
             scoreValues.some((score) => !score || score.trim() === "")
           ) {
-            return false; // No scores or empty scores
+            return `All fields for "${question.label}" must be filled.`; // No scores or empty scores
           }
           // Table validation passed, continue to next question
           continue;
@@ -533,7 +544,7 @@ export default function DynamicSurveyForm() {
             "indicators" in value &&
             (value.indicators === undefined || value.indicators.length === 0))
         ) {
-          return false; // Unanswered required field
+          return `Please fill all scores for "${question.label}".`; // Unanswered required field
         }
 
         if (question.type === "multi_text" && value) {
@@ -542,7 +553,7 @@ export default function DynamicSurveyForm() {
           // Check if all defined entries (up to maxEntries) are non-empty
           for (let i = 0; i < maxEntries; i++) {
             if (!entries[i] || entries[i].trim() === "") {
-              return false; // Any empty field fails validation
+              return `All fields for "${question.label}" must be filled.`; // Any empty field fails validation
             }
           }
         }
@@ -554,21 +565,21 @@ export default function DynamicSurveyForm() {
             scores: { [key: string]: string };
           };
           if (dropdownData.indicators.length === 0) {
-            return false;
+            return `Please select at least one option for "${question.label}".`;
           }
         }
 
         if (question.type === "checkbox" && value) {
           const checkboxValues = value as string[];
           if (checkboxValues.length === 0) {
-            return false;
+            return `Please select at least one option for "${question.label}".`;
           }
           if (
             checkboxValues.includes("Other") &&
             (!formData[`${question.id}-other`] ||
               (formData[`${question.id}-other`] as string).trim() === "")
           ) {
-            return false;
+            return `Please specify the "Other" option for "${question.label}".`;
           }
         }
 
@@ -578,7 +589,7 @@ export default function DynamicSurveyForm() {
             (showExplanation[question.id] &&
               !formData[`${question.id}-explanation`])
           ) {
-            return false;
+            return `Please select an option for "${question.label}".`;
           }
         }
 
@@ -590,21 +601,21 @@ export default function DynamicSurveyForm() {
           question.type === "date"
         ) {
           if (!value) {
-            return false;
+            return `The field "${question.label}" is required.`;
           }
         }
       }
     }
-    return true;
+    return null;
   };
 
   const handleNext = (e: React.MouseEvent) => {
     e.preventDefault();
     const currentQuestions = getCurrentQuestions();
-    if (!validateRequiredFields(currentQuestions)) {
-      toast.error(
-        "Please fill all required fields (*) on this page before proceeding."
-      );
+    const errorMessage = validateRequiredFields(currentQuestions);
+    if (errorMessage) {
+      toast.dismiss(); // Clear any existing toasts
+      toast.error(errorMessage);
       return;
     }
     setCurrentPage((prev) => prev + 1);
