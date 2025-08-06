@@ -111,7 +111,7 @@ export default function DynamicSurveyForm() {
         const { data: questionsData, error: questionsError } = await supabase
           .from("questions")
           .select(
-            "id, question_text, question_type, is_required, table_headings, sequence"
+            "id, question_text, question_type, is_required, table_headings, sequence, isvisible"
           )
           .order("sequence", { ascending: true });
 
@@ -135,7 +135,12 @@ export default function DynamicSurveyForm() {
           return;
         }
 
-        const mappedQuestions: Question[] = questionsData.map((q) => {
+        // Filter out questions where isvisible is false
+        const visibleQuestionsData = questionsData.filter(
+          (q) => q.isvisible !== false
+        );
+
+        const mappedQuestions: Question[] = visibleQuestionsData.map((q) => {
           const baseQuestion = {
             id: q.id.toString(),
             label: q.question_text,
@@ -525,35 +530,39 @@ export default function DynamicSurveyForm() {
           };
           const rows = tableRows[question.id] || [];
           // Specific validation for ID 10: Require exactly 3 rows with all data
-        if (question.id === "10") {
-          if (rows.length !== 3) {
-            return `Please provide exactly 3 examples for "${question.label}".`;
-          }
-          for (const row of rows) {
-            if (!row.indicator || row.indicator.trim() === "") {
-              return `Please fill the indicator for each example in "${question.label}".`;
+          if (question.id === "10") {
+            if (rows.length !== 3) {
+              return `Please provide exactly 3 examples for "${question.label}".`;
             }
-            const scoreKeys = Object.keys(tableData.scores).filter(key =>
-              key.startsWith(`${row.indicator}-`)
-            );
-            if (
-              scoreKeys.length < 3 ||
-              scoreKeys.some(key => !tableData.scores[key] || tableData.scores[key].trim() === "")
-            ) {
-              return `Please fill all scores for each example in "${question.label}".`;
+            for (const row of rows) {
+              if (!row.indicator || row.indicator.trim() === "") {
+                return `Please fill the indicator for each example in "${question.label}".`;
+              }
+              const scoreKeys = Object.keys(tableData.scores).filter((key) =>
+                key.startsWith(`${row.indicator}-`)
+              );
+              if (
+                scoreKeys.length < 3 ||
+                scoreKeys.some(
+                  (key) =>
+                    !tableData.scores[key] ||
+                    tableData.scores[key].trim() === ""
+                )
+              ) {
+                return `Please fill all scores for each example in "${question.label}".`;
+              }
             }
-          }
           } else {
-          const scoreValues = Object.values(tableData.scores);
-          if (
-            scoreValues.length === 0 ||
-            scoreValues.some((score) => !score || score.trim() === "")
-          ) {
-            return `All fields for "${question.label}" must be filled.`; // No scores or empty scores
+            const scoreValues = Object.values(tableData.scores);
+            if (
+              scoreValues.length === 0 ||
+              scoreValues.some((score) => !score || score.trim() === "")
+            ) {
+              return `All fields for "${question.label}" must be filled.`; // No scores or empty scores
+            }
           }
+          continue;
         }
-        continue;
-      }
 
         // Original validation for other question types
         if (
