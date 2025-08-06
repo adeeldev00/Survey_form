@@ -593,23 +593,24 @@ export default function DynamicSurveyForm() {
             indicators: string[];
             scores: { [key: string]: string };
           };
+          //validation-1
           if (dropdownData.indicators.length < 10) {
             // New validation for 10 indicators
             return `Please select exactly 10 indicators for "${question.label}".`;
           }
+          //validation-2
           if (dropdownData.indicators.length === 0) {
             return `Please select at least one option for "${question.label}".`;
           }
+
           if (dropdownData.indicators.length === 10) {
             const allScoresFilled = dropdownData.indicators.every(
               (indicator) =>
-                dropdownData.scores[`${indicator}-Score`] &&
-                parseInt(dropdownData.scores[`${indicator}-Score`]) >= 1 &&
-                parseInt(dropdownData.scores[`${indicator}-Score`]) <= 10
+                dropdownData.scores[`${indicator}`] &&
+                parseInt(dropdownData.scores[`${indicator}`]) >= 1 &&
+                parseInt(dropdownData.scores[`${indicator}`]) <= 10
             );
-            if (!allScoresFilled) {
-              return `Please assign a score (1-10) for each selected indicator in "${question.label}".`;
-            }
+            console.log(allScoresFilled);
           }
         }
 
@@ -674,10 +675,16 @@ export default function DynamicSurveyForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const currentQuestions = getCurrentQuestions();
-    if (!validateRequiredFields(currentQuestions)) {
-      toast.error("Please fill all required fields (*) before submitting.");
-      return;
-    }
+    const validationError = validateRequiredFields(currentQuestions);
+    console.log("Validation result:", validationError);
+    if (validationError) {
+    toast.error(validationError);
+    return;
+  }
+    // if (!validateRequiredFields(currentQuestions)) {
+    //   toast.error("Please fill all required fields (*) before submitting.");
+    //   return;
+    // }
 
     try {
       const { data: optionsData } = await supabase
@@ -1225,81 +1232,6 @@ export default function DynamicSurveyForm() {
               )}
           </div>
         );
-
-      // case "table":
-      //   return (
-      //     <div>
-      //       <Label className="text-sm font-medium mb-2 block text-foreground">
-      //         {question.label} {question.required && "*"}
-      //       </Label>
-      //       <Table>
-      //         <TableHeader>
-      //           <TableRow>
-      //             {question.tableHeadings?.map((heading) => (
-      //               <TableHead key={heading} className="text-foreground">
-      //                 {heading}
-      //               </TableHead>
-      //             ))}
-      //           </TableRow>
-      //         </TableHeader>
-      //         <TableBody>
-      //           {(tableRows[question.id] || []).map((row, index) => (
-      //             <TableRow key={index}>
-      //               <TableCell>
-      //                 <Input
-      //                   value={row.indicator}
-      //                   onChange={(e) =>
-      //                     handleTableChange(
-      //                       question.id,
-      //                       index,
-      //                       "Indicator",
-      //                       e.target.value
-      //                     )
-      //                   }
-      //                   placeholder="Enter indicator"
-      //                   className="w-full p-2 border border-border rounded-md"
-      //                 />
-      //               </TableCell>
-      //               {question.tableHeadings?.slice(1).map((heading) => (
-      //                 <TableCell key={heading}>
-      //                   <Input
-      //                     type="number"
-      //                     min="1"
-      //                     max="10"
-      //                     value={
-      //                       (
-      //                         formData[question.id] as {
-      //                           indicators: string[];
-      //                           scores: { [key: string]: string };
-      //                         }
-      //                       )?.scores[`${row.indicator}-${heading}`] || ""
-      //                     }
-      //                     onChange={(e) =>
-      //                       handleTableChange(
-      //                         question.id,
-      //                         index,
-      //                         heading,
-      //                         e.target.value
-      //                       )
-      //                     }
-      //                     placeholder="Rate (1-10)"
-      //                     className="w-full p-2 border border-border rounded-md"
-      //                   />
-      //                 </TableCell>
-      //               ))}
-      //             </TableRow>
-      //           ))}
-      //         </TableBody>
-      //       </Table>
-      //       <Button
-      //         type="button"
-      //         onClick={() => addRow(question.id)}
-      //         className="mt-2 bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-md"
-      //       >
-      //         Add Row
-      //       </Button>
-      //     </div>
-      //   );
 
       case "table":
         return (
