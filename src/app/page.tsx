@@ -678,9 +678,9 @@ export default function DynamicSurveyForm() {
     const validationError = validateRequiredFields(currentQuestions);
     console.log("Validation result:", validationError);
     if (validationError) {
-    toast.error(validationError);
-    return;
-  }
+      toast.error(validationError);
+      return;
+    }
     // if (!validateRequiredFields(currentQuestions)) {
     //   toast.error("Please fill all required fields (*) before submitting.");
     //   return;
@@ -1195,8 +1195,9 @@ export default function DynamicSurveyForm() {
                             numValue.toString()
                           );
                         }}
+                        onWheel={(e) => e.currentTarget.blur()}
                         placeholder="1-10"
-                        className="w-20 flex-shrink-0"
+                        className="w-20 flex-shrink-0 no-spinners"
                       />
                     </div>
                   </div>
@@ -1290,8 +1291,12 @@ export default function DynamicSurveyForm() {
                               e.target.value
                             )
                           }
+                          /*onwheel hide the default number input spinner on scrolling up and down the number is change 
+                          blur(): Removes focus from the input, so the wheel can’t change the value.*/
+                          onWheel={(e) => e.currentTarget.blur()}
                           placeholder="Rate (1-10)"
-                          className="w-full p-2 border border-border rounded-md"
+                          className="w-full p-2 border border-border rounded-md no-spinners"
+                          //no-spinners class is used to hide the default number input spinner icon
                         />
                       </TableCell>
                     ))}

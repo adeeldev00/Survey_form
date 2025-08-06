@@ -47,3 +47,14 @@ body {
   --sidebar-border: var(--dark-sidebar-border);
   --sidebar-ring: var(--dark-sidebar-ring);
 }
+
+/* this hide the default scroling icon of number input mean (when scroll up and down the number change we hide that by this style   */
+input[type="number"].no-spinners {
+  -moz-appearance: textfield; /* Firefox */
+}
+
+input[type="number"].no-spinners::-webkit-outer-spin-button,
+input[type="number"].no-spinners::-webkit-inner-spin-button {
+  -webkit-appearance: none; /* Chrome, Safari, Edge, Opera */
+  margin: 0;
+}
