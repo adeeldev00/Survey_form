@@ -1,0 +1,12 @@
+name: Prevent Supabase Inactivity
+on:
+  schedule:
+    - cron: '0 0 * * 0' # Runs at midnight every Sunday (UTC)
+  workflow_dispatch: # Allows manual triggering
+jobs:
+  ping-database:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase API
+        run: |
+          curl -X GET "https://survey-form-vert-phi.vercel.app/api/keep-alive"
